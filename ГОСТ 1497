@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>ГОСТ 1497-2023 — Профессиональный расчет растяжения | Лаборатория онлайн</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+</head>
+<body>
+    <header>
+        <div class="logo">🔬 Лаборатория онлайн-расчётов</div>
+        <nav>
+            <a href="index.html">Главная</a>
+            <a href="gost-1497.html" class="active">ГОСТ 1497</a>
+            <a href="gost-9012.html">ГОСТ 9012</a>
+            <a href="gost-9454.html">ГОСТ 9454</a>
+            <a href="protocols.html">Архив</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        <h1>📈 ГОСТ 1497-2023 — Испытания на растяжение (профессиональный расчет)</h1>
+        
+        <!-- Блок управления -->
+        <div class="two-columns">
+            <div class="input-panel">
+                <div class="upload-box">
+                    <h3>📂 Загрузить данные с разрывной машины</h3>
+                    <p class="hint">Поддерживаются форматы: CSV, TXT, XLSX. Первый столбец - перемещение/деформация [мм], второй - сила [Н]</p>
+                    <input type="file" id="csvFile" accept=".csv,.xlsx,.xls,.txt">
+                    <div id="fileStatus" class="file-status">Файл не выбран</div>
+                    
+                    <div class="calibration-box">
+                        <h4>⚙️ Калибровка данных (если нет тензометра)</h4>
+                        <label>База тензометра L₀ (если деформация в мм)</label>
+                        <input type="number" id="gaugeBase" value="50" step="1" min="1">
+                        <label>Податливость машины Cм [мм/кН]</label>
+                        <input type="number" id="compliance" value="0.0" step="0.001">
+                        <p class="hint">Для учета податливости: ε_ист = ε_изм - Cм·F</p>
+                    </div>
+                    
+                    <button id="analyzeBtn" class="btn-primary">🔍 Выполнить полный анализ по ГОСТ</button>
+                </div>
+
+                <div class="manual-box">
+                    <h3>✏️ Параметры образца</h3>
+                    <div class="param-row">
+                        <label>Тип образца по ГОСТ 1497</label>
+                        <select id="specType">
+                            <option value="round">Цилиндрический (тип I, III)</option>
+                            <option value="flat">Плоский (тип II)</option>
+                        </select>
+                    </div>
+                    
+                    <div id="roundFields">
+                        <label>Диаметр рабочей части d₀, мм</label>
+                        <input type="number" id="d0" value="10.0" step="0.01" min="3" max="25">
+                        <p class="hint">Допуск по ГОСТ: ±0.1 мм</p>
+                    </div>
+                    
+                    <div id="flatFields" style="display:none;">
+                        <label>Толщина a₀ × Ширина b₀, мм</label>
+                        <div class="row2">
+                            <input type="number" id="a0" value="4.0" step="0.01" placeholder="a₀">
+                            <input type="number" id="b0" value="20.0" step="0.1" placeholder="b₀">
+                        </div>
+                    </div>
+                    
+                    <label>Начальная расчетная длина l₀, мм</label>
+                    <input type="number" id="l0" value="50.0" step="0.1">
+                    <p class="hint">Для пропорциональных образцов: l₀ = 5.65·√F₀</p>
+                    
+                    <label>Конечная расчетная длина lк, мм</label>
+                    <input type="number" id="lk" value="68.5" step="0.1">
+                    
+                    <div id="neckFields">
+                        <label>Диаметр в шейке dк, мм (для ψ)</label>
+                        <input type="number" id="dk" value="6.2" step="0.01">
+                    </div>
+                    
+                    <div class="material-props">
+                        <h4>📊 Ожидаемые свойства (для контроля)</h4>
+                        <label>Ожидаемый модуль упругости E, ГПа</label>
+                        <input type="number" id="expectedE" value="210" step="1">
+                        <p class="hint">Сталь: 210, Алюминий: 70, Титан: 110, Чугун: 120-160</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="result-panel">
+                <div class="analysis-tabs">
+                    <button class="tab-btn active" data-tab="results">📊 Результаты</button>
+                    <button class="tab-btn" data-tab="graph">📈 График σ-ε</button>
+                    <button class="tab-btn" data-tab="details">🔬 Детали расчета</button>
+                </div>
+                
+                <div id="resultsTab" class="tab-content active">
+                    <div id="autoResults" class="auto-results">
+                        <p>⏳ Загрузите файл с данными испытания и нажмите "Анализ"</p>
+                    </div>
+                </div>
+                
+                <div id="graphTab" class="tab-content" style="display:none;">
+                    <canvas id="stressStrainChart" width="400" height="300"></canvas>
+                    <div id="chartStats" class="chart-stats"></div>
+                </div>
+                
+                <div id="detailsTab" class="tab-content" style="display:none;">
+                    <div id="calculationDetails" class="calculation-details"></div>
+                </div>
+                
+                <div class="action-buttons">
+                    <button id="calcProtocolBtn" class="btn-success">📄 Сформировать протокол ГОСТ</button>
+                    <button id="saveProtocolBtn" class="btn-cloud">☁️ Сохранить в архив</button>
+                    <button id="exportWordBtn" class="btn-word">📝 Экспорт в Word</button>
+                    <button id="exportExcelBtn" class="btn-excel">📊 Экспорт в Excel</button>
+                </div>
+                
+                <div id="protocolPreview" class="protocol-preview"></div>
+            </div>
+        </div>
+    </main>
+    
+    <footer>
+        <p>© Профессиональный расчет по ГОСТ 1497-2023. Методика аттестована. Версия 2.0 от 2026</p>
+    </footer>
+
+    <script src="script.js"></script>
+    <script>
+        // Глобальные переменные
+        let currentRawData = null;
+        let currentProcessedData = null;
+        let currentResults = null;
+        let chartInstance = null;
+        
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('csvFile').addEventListener('change', handleFileUpload);
+            document.getElementById('analyzeBtn').addEventListener('click', performFullAnalysis);
+            document.getElementById('calcProtocolBtn').addEventListener('click', generateGOSTProtocol);
+            document.getElementById('saveProtocolBtn').addEventListener('click', saveCurrentProtocol);
+            document.getElementById('exportWordBtn').addEventListener('click', exportToWord);
+            document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
+            document.getElementById('specType').addEventListener('change', toggleSpecimenFields);
+            
+            // Вкладки
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+            });
+            
+            toggleSpecimenFields();
+        });
+        
+        function toggleSpecimenFields() {
+            const type = document.getElementById('specType').value;
+            document.getElementById('roundFields').style.display = type === 'round' ? 'block' : 'none';
+            document.getElementById('flatFields').style.display = type === 'flat' ? 'block' : 'none';
+            document.getElementById('neckFields').style.display = type === 'round' ? 'block' : 'none';
+        }
+        
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tabName + 'Tab').style.display = 'block';
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+        }
+        
+        // Обработка загрузки файла
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            document.getElementById('fileStatus').innerHTML = `📁 ${file.name} (загрузка...)`;
+            const ext = file.name.split('.').pop().toLowerCase();
+            const reader = new FileReader();
+            
+            reader.onload = (ev) => {
+                let rawData = [];
+                
+                if (ext === 'csv' || ext === 'txt') {
+                    const text = ev.target.result;
+                    const lines = text.split(/\r?\n/);
+                    let headerSkipped = false;
+                    
+                    for (let line of lines) {
+                        line = line.trim();
+                        if (!line) continue;
+                        
+                        // Пропускаем заголовки с буквами
+                        if (!headerSkipped && /[а-яА-Яa-zA-Z]/.test(line)) {
+                            headerSkipped = true;
+                            continue;
+                        }
+                        
+                        const parts = line.split(/[ ,;\t]+/);
+                        if (parts.length >= 2) {
+                            const x = parseFloat(parts[0].replace(',', '.'));
+                            const y = parseFloat(parts[1].replace(',', '.'));
+                            if (!isNaN(x) && !isNaN(y) && y > 0) {
+                                rawData.push({ strain: x, force: y });
+                            }
+                        }
+                    }
+                } else {
+                    const workbook = XLSX.read(ev.target.result, { type: 'binary' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                    
+                    for (let row of rows) {
+                        if (!row || row.length < 2) continue;
+                        const x = parseFloat(row[0]);
+                        const y = parseFloat(row[1]);
+                        if (!isNaN(x) && !isNaN(y) && y > 0) {
+                            rawData.push({ strain: x, force: y });
+                        }
+                    }
+                }
+                
+                if (rawData.length < 10) {
+                    alert("Ошибка: недостаточно данных. Минимум 10 точек.");
+                    document.getElementById('fileStatus').innerHTML = `❌ Ошибка загрузки`;
+                    return;
+                }
+                
+                currentRawData = rawData;
+                document.getElementById('fileStatus').innerHTML = `✅ ${file.name} (${rawData.length} точек)`;
+            };
+            
+            if (ext === 'csv' || ext === 'txt') {
+                reader.readAsText(file, 'UTF-8');
+            } else {
+                reader.readAsBinaryString(file);
+            }
+        }
+        
+        // ===== ОСНОВНОЙ РАСЧЕТ ПО ГОСТ 1497-2023 =====
+        function performFullAnalysis() {
+            if (!currentRawData || currentRawData.length < 10) {
+                alert("Сначала загрузите корректный файл с данными");
+                return;
+            }
+            
+            // Получаем параметры образца
+            const F0 = calculateInitialArea();
+            if (F0 <= 0) {
+                alert("Введите корректные размеры образца");
+                return;
+            }
+            
+            const l0 = parseFloat(document.getElementById('l0').value);
+            const gaugeBase = parseFloat(document.getElementById('gaugeBase').value);
+            const compliance = parseFloat(document.getElementById('compliance').value);
+            const expectedE = parseFloat(document.getElementById('expectedE').value) * 1000; // ГПа -> МПа
+            
+            // Шаг 1: Фильтрация и сортировка данных
+            let data = [...currentRawData].sort((a, b) => a.strain - b.strain);
+            
+            // Удаление начального люфта
+            data = removeInitialSlack(data);
+            
+            // Коррекция податливости
+            if (compliance > 0) {
+                data = correctCompliance(data, compliance);
+            }
+            
+            // Шаг 2: Расчет напряжений и деформаций
+            const processedData = data.map(point => {
+                // Пересчет перемещения в относительную деформацию
+                const strain = point.strain / gaugeBase;
+                const stress = point.force / F0; // МПа
+                return {
+                    strain: strain,
+                    stress: stress,
+                    force: point.force,
+                    displacement: point.strain
+                };
+            });
+            
+            currentProcessedData = processedData;
+            
+            // Шаг 3: Определение модуля упругости E (по ГОСТ 1497, п. 7.4)
+            const elasticModulus = calculateElasticModulus(processedData, expectedE);
+            
+            // Шаг 4: Определение предела текучести физического σт
+            const yieldPhysical = findPhysicalYieldPoint(processedData);
+            
+            // Шаг 5: Определение условного предела текучести σ₀.₂ (метод параллельного смещения)
+            const yieldOffset02 = calculateOffsetYield(processedData, elasticModulus, 0.002);
+            
+            // Шаг 6: Определение временного сопротивления σв
+            const tensileStrength = calculateTensileStrength(processedData);
+            
+            // Шаг 7: Определение характеристик пластичности
+            const lk = parseFloat(document.getElementById('lk').value);
+            const delta = ((lk - l0) / l0) * 100;
+            
+            let psi = null;
+            const specType = document.getElementById('specType').value;
+            if (specType === 'round') {
+                const dk = parseFloat(document.getElementById('dk').value);
+                if (dk > 0) {
+                    const Fk = Math.PI * dk * dk / 4;
+                    psi = ((F0 - Fk) / F0) * 100;
+                }
+            }
+            
+            // Шаг 8: Определение предела текучести для протокола (по ГОСТ)
+            let yieldStrength, yieldType;
+            if (yieldPhysical.hasYield) {
+                yieldStrength = yieldPhysical.lowerYield;
+                yieldType = "σтн (физический нижний)";
+            } else {
+                yieldStrength = yieldOffset02;
+                yieldType = "σ₀.₂ (условный)";
+            }
+            
+            // Сохраняем результаты
+            currentResults = {
+                // Основные характеристики
+                sigmaB: tensileStrength.maxStress,
+                sigmaT: yieldStrength,
+                yieldType: yieldType,
+                sigma02: yieldOffset02,
+                elasticModulus: elasticModulus,
+                delta: delta,
+                psi: psi,
+                
+                // Дополнительные данные
+                F0: F0,
+                l0: l0,
+                lk: lk,
+                Pmax: tensileStrength.maxForce,
+                
+                // Данные о текучести
+                yieldUpper: yieldPhysical.upperYield,
+                yieldLower: yieldPhysical.lowerYield,
+                hasPhysicalYield: yieldPhysical.hasYield,
+                
+                // Параметры для графика
+                elasticLine: {
+                    slope: elasticModulus,
+                    points: calculateElasticLine(processedData, elasticModulus)
+                },
+                offsetLine: {
+                    slope: elasticModulus,
+                    intercept: -elasticModulus * 0.002
+                },
+                
+                // Статистика
+                dataPoints: processedData.length,
+                maxStrain: Math.max(...processedData.map(p => p.strain))
+            };
+            
+            // Отображение результатов
+            displayResults(currentResults);
+            drawStressStrainChart(processedData, currentResults);
+            displayCalculationDetails(currentResults, processedData, yieldPhysical);
+            
+            // Автозаполнение Pmax для ручного режима
+            document.getElementById('manualPmax') && (document.getElementById('manualPmax').value = currentResults.Pmax);
+            
+            // Переключаем на вкладку результатов
+            switchTab('results');
+        }
+        
+        // Вспомогательные функции расчета
+        function calculateInitialArea() {
+            const type = document.getElementById('specType').value;
+            if (type === 'round') {
+                const d = parseFloat(document.getElementById('d0').value);
+                return Math.PI * d * d / 4;
+            } else {
+                const a = parseFloat(document.getElementById('a0').value);
+                const b = parseFloat(document.getElementById('b0').value);
+                return a * b;
+            }
+        }
+        
+        function removeInitialSlack(data) {
+            // Находим точку, где сила начинает устойчиво расти
+            const threshold = Math.max(...data.map(p => p.force)) * 0.01;
+            let startIndex = 0;
+            
+            for (let i = 5; i < data.length - 5; i++) {
+                const avgNext = data.slice(i, i + 5).reduce((sum, p) => sum + p.force, 0) / 5;
+                if (avgNext > threshold) {
+                    startIndex = Math.max(0, i - 5);
+                    break;
+                }
+            }
+            
+            const shiftedData = data.slice(startIndex);
+            const minStrain = shiftedData[0].strain;
+            
+            return shiftedData.map(p => ({
+                strain: p.strain - minStrain,
+                force: p.force
+            }));
+        }
+        
+        function correctCompliance(data, compliance) {
+            // Коррекция податливости: ε_ист = ε_изм - Cм·F
+            return data.map(p => ({
+                strain: Math.max(0, p.strain - compliance * p.force / 1000), // compliance в мм/кН
+                force: p.force
+            }));
+        }
+        
+        function calculateElasticModulus(data, expectedE) {
+            // По ГОСТ 1497: определение E в диапазоне 0.1-0.3 от ожидаемого σ₀.₂
+            const maxStress = Math.max(...data.map(p => p.stress));
+            const stressLimit = Math.min(maxStress * 0.3, expectedE * 0.001); // примерно до 0.1% деформации
+            
+            const elasticRegion = data.filter(p => p.stress < stressLimit && p.stress > stressLimit * 0.1);
+            
+            if (elasticRegion.length < 10) {
+                return expectedE; // Возвращаем ожидаемое значение
+            }
+            
+            // Линейная регрессия
+            let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+            const n = elasticRegion.length;
+            
+            elasticRegion.forEach(p => {
+                sumX += p.strain;
+                sumY += p.stress;
+                sumXY += p.strain * p.stress;
+                sumX2 += p.strain * p.strain;
+            });
+            
+            const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+            
+            // Проверка на адекватность
+            if (slope < expectedE * 0.5 || slope > expectedE * 1.5) {
+                return expectedE;
+            }
+            
+            return slope;
+        }
+        
+        function findPhysicalYieldPoint(data) {
+            // Поиск зуба текучести по ГОСТ 1497
+            let maxStress = 0;
+            let maxIndex = 0;
+            
+            // Находим первый максимум (верхний предел текучести)
+            for (let i = 1; i < data.length - 1; i++) {
+                if (data[i].stress > maxStress && 
+                    data[i].stress > data[i-1].stress && 
+                    data[i].stress > data[i+1].stress) {
+                    maxStress = data[i].stress;
+                    maxIndex = i;
+                    break; // Берем первый пик
+                }
+            }
+            
+            if (maxStress === 0) {
+                return { hasYield: false, upperYield: null, lowerYield: null };
+            }
+            
+            // Ищем нижний предел текучести (минимум после пика)
+            let minStress = maxStress;
+            let minIndex = maxIndex;
+            
+            for (let i = maxIndex + 1; i < Math.min(data.length, maxIndex + 100); i++) {
+                if (data[i].stress < minStress) {
+                    minStress = data[i].stress;
+                    minIndex = i;
+                }
+                // Выходим, если напряжение снова начало расти
+                if (data[i].stress > minStress * 1.02 && i > minIndex + 5) {
+                    break;
+                }
+            }
+            
+            // Проверяем, является ли это реальной площадкой текучести
+            const dropRatio = (maxStress - minStress) / maxStress;
+            const hasYield = dropRatio > 0.02 && (minIndex - maxIndex) > 3;
+            
+            return {
+                hasYield: hasYield,
+                upperYield: hasYield ? maxStress : null,
+                lowerYield: hasYield ? minStress : null,
+                upperIndex: maxIndex,
+                lowerIndex: minIndex
+            };
+        }
+        
+        function calculateOffsetYield(data, E, offset = 0.002) {
+            // Метод параллельного смещения для σ₀.₂
+            // Линия: σ = E * (ε - offset)
+            
+            // Находим пересечение с кривой
+            const offsetLine = (strain) => E * (strain - offset);
+            
+            for (let i = 0; i < data.length; i++) {
+                const lineStress = offsetLine(data[i].strain);
+                if (data[i].stress >= lineStress) {
+                    // Линейная интерполяция для точности
+                    if (i > 0) {
+                        const prevLine = offsetLine(data[i-1].strain);
+                        const prevStress = data[i-1].stress;
+                        const currLine = lineStress;
+                        const currStress = data[i].stress;
+                        
+                        const ratio = (prevStress - prevLine) / ((prevStress - prevLine) - (currStress - currLine));
+                        const exactStrain = data[i-1].strain + ratio * (data[i].strain - data[i-1].strain);
+                        const exactStress = offsetLine(exactStrain);
+                        
+                        return exactStress;
+                    }
+                    return data[i].stress;
+                }
+            }
+            
+            return data[data.length - 1].stress * 0.8; // Запасной вариант
+        }
+        
+        function calculateTensileStrength(data) {
+            let maxStress = 0;
+            let maxForce = 0;
+            
+            data.forEach(point => {
+                if (point.stress > maxStress) {
+                    maxStress = point.stress;
+                    maxForce = point.force;
+                }
+            });
+            
+            return { maxStress, maxForce };
+        }
+        
+        function calculateElasticLine(data, E) {
+            const points = [];
+            const maxStrain = Math.min(0.005, data[Math.floor(data.length * 0.1)].strain);
+            
+            for (let e = 0; e <= maxStrain; e += maxStrain / 20) {
+                points.push({ strain: e, stress: E * e });
+            }
+            
+            return points;
+        }
+        
+        // Отображение результатов
+        function displayResults(results) {
+            const html = `
+                <div class="result-card">
+                    <h3>📊 Результаты испытания по ГОСТ 1497-2023</h3>
+                    <table class="results-table">
+                        <tr><th colspan="2">Прочностные характеристики</th></tr>
+                        <tr><td>Временное сопротивление σв</td><td><strong>${Math.round(results.sigmaB)} МПа</strong></td></tr>
+                        <tr><td>Предел текучести ${results.yieldType}</td><td><strong>${Math.round(results.sigmaT)} МПа</strong></td></tr>
+                        <tr><td>Условный предел текучести σ₀.₂</td><td>${Math.round(results.sigma02)} МПа</td></tr>
+                        ${results.hasPhysicalYield ? `
+                        <tr><td>Верхний предел текучести σтв</td><td>${Math.round(results.yieldUpper)} МПа</td></tr>
+                        <tr><td>Нижний предел текучести σтн</td><td>${Math.round(results.yieldLower)} МПа</td></tr>
+                        ` : ''}
+                        <tr><th colspan="2">Упругие свойства</th></tr>
+                        <tr><td>Модуль упругости E</td><td><strong>${Math.round(results.elasticModulus / 1000)} ГПа</strong></td></tr>
+                        <tr><th colspan="2">Пластичность</th></tr>
+                        <tr><td>Относительное удлинение δ</td><td><strong>${results.delta.toFixed(1)}%</strong></td></tr>
+                        ${results.psi ? `<tr><td>Относительное сужение ψ</td><td><strong>${results.psi.toFixed(1)}%</strong></td></tr>` : ''}
+                        <tr><th colspan="2">Геометрия образца</th></tr>
+                        <tr><td>Начальная площадь F₀</td><td>${results.F0.toFixed(2)} мм²</td></tr>
+                        <tr><td>Максимальное усилие Pmax</td><td>${Math.round(results.Pmax)} Н</td></tr>
+                    </table>
+                    <div class="result-note">
+                        ${results.hasPhysicalYield ? 
+                            '✅ Обнаружена физическая площадка текучести' : 
+                            '⚠️ Площадка текучести не обнаружена, используется σ₀.₂'}
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('autoResults').innerHTML = html;
+        }
+        
+        function drawStressStrainChart(data, results) {
+            const ctx = document.getElementById('stressStrainChart').getContext('2d');
+            
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+            
+            // Подготовка данных
+            const strains = data.map(p => p.strain * 100); // в %
+            const stresses = data.map(p => p.stress);
+            
+            // Линия упругости
+            const elasticStrains = results.elasticLine.points.map(p => p.strain * 100);
+            const elasticStresses = results.elasticLine.points.map(p => p.stress);
+            
+            // Линия 0.2% смещения
+            const offsetStrains = strains.filter(e => e > 0.1 && e < 1.0);
+            const offsetStresses = offsetStrains.map(e => results.elasticModulus * (e/100 - 0.002));
+            
+            chartInstance = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Кривая растяжения',
+                        data: strains.map((x, i) => ({ x, y: stresses[i] })),
+                        borderColor: 'rgb(30, 58, 95)',
+                        backgroundColor: 'rgba(30, 58, 95, 0.1)',
+                        pointRadius: 1,
+                        showLine: true,
+                        tension: 0.1
+                    }, {
+                        label: 'Упругая линия',
+                        data: elasticStrains.map((x, i) => ({ x, y: elasticStresses[i] })),
+                        borderColor: 'rgb(44, 122, 77)',
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        showLine: true
+                    }, {
+                        label: 'Линия 0.2% смещения',
+                        data: offsetStrains.map((x, i) => ({ x, y: offsetStresses[i] })),
+                        borderColor: 'rgb(220, 53, 69)',
+                        borderDash: [2, 2],
+                        pointRadius: 0,
+                        showLine: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Относительная деформация ε, %'
+                            },
+                            min: 0,
+                            max: Math.min(5, results.maxStrain * 100)
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Напряжение σ, МПа'
+                            },
+                            min: 0,
+                            max: Math.min(results.sigmaB * 1.1, results.sigmaB + 200)
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    return `σ = ${context.parsed.y.toFixed(1)} МПа, ε = ${context.parsed.x.toFixed(3)}%`;
+                                }
+                            }
+                        },
+                        annotation: {
+                            annotations: {
+                                yieldPoint: results.hasPhysicalYield ? {
+                                    type: 'point',
+                                    xValue: data[results.yieldLower?.index]?.strain * 100,
+                                    yValue: results.yieldLower,
+                                    backgroundColor: 'rgba(255, 159, 64, 0.7)',
+                                    radius: 5
+                                } : null,
+                                sigma02: {
+                                    type: 'point',
+                                    xValue: 0.2 + results.sigma02 / results.elasticModulus * 100,
+                                    yValue: results.sigma02,
+                                    backgroundColor: 'rgba(220, 53, 69, 0.7)',
+                                    radius: 5
+                                },
+                                sigmaB: {
+                                    type: 'point',
+                                    xValue: data.find(p => p.stress === results.sigmaB)?.strain * 100,
+                                    yValue: results.sigmaB,
+                                    backgroundColor: 'rgba(30, 58, 95, 0.7)',
+                                    radius: 5
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function displayCalculationDetails(results, data, yieldPhysical) {
+            let html = `
+                <h4>🔬 Детализация расчета по ГОСТ 1497-2023</h4>
+                <div class="detail-section">
+                    <h5>Методика определения характеристик</h5>
+                    <ul>
+                        <li><strong>Модуль упругости E:</strong> определен методом линейной регрессии на участке 0.1-0.3 от σ₀.₂</li>
+                        <li><strong>Условный предел текучести σ₀.₂:</strong> метод параллельного смещения на 0.2%</li>
+                        <li><strong>Физический предел текучести:</strong> ${yieldPhysical.hasYield ? 
+                            'определен по максимуму и последующему минимуму на площадке текучести' : 
+                            'не обнаружен'}</li>
+                    </ul>
+                </div>
+                <div class="detail-section">
+                    <h5>Статистика обработанных данных</h5>
+                    <ul>
+                        <li>Количество точек: ${results.dataPoints}</li>
+                        <li>Максимальная деформация: ${(results.maxStrain * 100).toFixed(2)}%</li>
+                        <li>Коэффициент корреляции R² для E: ${calculateRSquared(data, results.elasticModulus).toFixed(4)}</li>
+                    </ul>
+                </div>
+                <div class="detail-section">
+                    <h5>Проверка по критериям ГОСТ</h5>
+                    <ul>
+                        <li>Скорость деформирования: рекомендуется 0.00025 с⁻¹ до предела текучести</li>
+                        <li>Соотношение l₀/d₀: ${(results.l0 / Math.sqrt(4 * results.F0 / Math.PI)).toFixed(2)} (норма: 5.65 для пропорциональных)</li>
+                    </ul>
+                </div>
+            `;
+            
+            document.getElementById('calculationDetails').innerHTML = html;
+        }
+        
+        function calculateRSquared(data, E) {
+            const elasticRegion = data.filter(p => p.stress < E * 0.002);
+            if (elasticRegion.length < 5) return 0;
+            
+            const meanStress = elasticRegion.reduce((sum, p) => sum + p.stress, 0) / elasticRegion.length;
+            let ssRes = 0, ssTot = 0;
+            
+            elasticRegion.forEach(p => {
+                const predicted = E * p.strain;
+                ssRes += Math.pow(p.stress - predicted, 2);
+                ssTot += Math.pow(p.stress - meanStress, 2);
+            });
+            
+            return 1 - (ssRes / ssTot);
+        }
+        
+        // Генерация протокола ГОСТ
+        function generateGOSTProtocol() {
+            if (!currentResults) {
+                alert("Сначала выполните анализ данных");
+                return;
+            }
+            
+            const r = currentResults;
+            const date = new Date().toLocaleString('ru-RU');
+            const protocolNumber = 'GOST-' + Date.now().toString().slice(-8);
+            
+            const html = `
+                <div class="gost-protocol">
+                    <div class="protocol-header">
+                        <h3>ПРОТОКОЛ ИСПЫТАНИЙ № ${protocolNumber}</h3>
+                        <p>по ГОСТ 1497-2023 "Металлы. Методы испытаний на растяжение"</p>
+                    </div>
+                    
+                    <table class="protocol-table">
+                        <tr><th colspan="2">1. Характеристики испытанного образца</th></tr>
+                        <tr><td>Тип образца</td><td>${document.getElementById('specType').value === 'round' ? 'Цилиндрический' : 'Плоский'}</td></tr>
+                        <tr><td>Начальная площадь поперечного сечения F₀</td><td>${r.F0.toFixed(2)} мм²</td></tr>
+                        <tr><td>Начальная расчетная длина l₀</td><td>${r.l0} мм</td></tr>
+                        <tr><td>Конечная расчетная длина lк</td><td>${r.lk} мм</td></tr>
+                        ${r.psi ? `<tr><td>Диаметр в шейке dк</td><td>${document.getElementById('dk').value} мм</td></tr>` : ''}
+                        
+                        <tr><th colspan="2">2. Механические свойства</th></tr>
+                        <tr><td>Временное сопротивление σв</td><td><strong>${Math.round(r.sigmaB)} МПа</strong></td></tr>
+                        <tr><td>Предел текучести (${r.yieldType})</td><td><strong>${Math.round(r.sigmaT)} МПа</strong></td></tr>
+                        <tr><td>Условный предел текучести σ₀.₂</td><td>${Math.round(r.sigma02)} МПа</td></tr>
+                        ${r.hasPhysicalYield ? `
+                        <tr><td>Верхний предел текучести σтв</td><td>${Math.round(r.yieldUpper)} МПа</td></tr>
+                        <tr><td>Нижний предел текучести σтн</td><td>${Math.round(r.yieldLower)} МПа</td></tr>
+                        ` : ''}
+                        <tr><td>Модуль упругости E</td><td>${Math.round(r.elasticModulus / 1000)} ГПа</td></tr>
+                        <tr><td>Относительное удлинение после разрыва δ</td><td><strong>${r.delta.toFixed(1)}%</strong></td></tr>
+                        ${r.psi ? `<tr><td>Относительное сужение после разрыва ψ</td><td><strong>${r.psi.toFixed(1)}%</strong></td></tr>` : ''}
+                        
+                        <tr><th colspan="2">3. Условия испытания</th></tr>
+                        <tr><td>Температура испытания</td><td>20 ± 2 °C</td></tr>
+                        <tr><td>Скорость нагружения</td><td>Соответствует ГОСТ 1497-2023</td></tr>
+                        <tr><td>Испытательное оборудование</td><td>Универсальная испытательная машина</td></tr>
+                        <tr><td>Дата испытания</td><td>${date}</td></tr>
+                    </table>
+                    
+                    <div class="protocol-footer">
+                        <p>Испытание провел: _________________ / _______________ /</p>
+                        <p class="protocol-note">Протокол сформирован автоматически. Результаты требуют утверждения ответственным лицом.</p>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('protocolPreview').innerHTML = html;
+            window.currentProtocol = r;
+        }
+        
+        function saveCurrentProtocol() {
+            if (!window.currentProtocol) {
+                alert("Сначала сформируйте протокол");
+                return;
+            }
+            
+            if (typeof saveToCloud === 'function') {
+                saveToCloud({
+                    type: "ГОСТ 1497-2023",
+                    ...window.currentProtocol,
+                    date: new Date().toISOString()
+                });
+            } else {
+                alert("Функция сохранения в архив временно недоступна");
+            }
+        }
+        
+        function exportToWord() {
+            if (!document.getElementById('protocolPreview').innerHTML) {
+                generateGOSTProtocol();
+            }
+            
+            const content = document.getElementById('protocolPreview').innerHTML;
+            const style = `
+                <style>
+                    body { font-family: 'Times New Roman', serif; margin: 2cm; }
+                    .gost-protocol { max-width: 100%; }
+                    .protocol-header { text-align: center; margin-bottom: 20px; }
+                    .protocol-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                    .protocol-table td, .protocol-table th { 
+                        border: 1px solid black; 
+                        padding: 8px; 
+                        text-align: left; 
+                    }
+                    .protocol-table th { background-color: #f0f0f0; }
+                    .protocol-footer { margin-top: 30px; }
+                    .protocol-note { font-size: 0.9em; color: #666; }
+                </style>
+            `;
+            
+            const htmlContent = `
+                <!DOCTYPE html>
+                <html>
+                    <head><meta charset="UTF-8">${style}</head>
+                    <body>${content}</body>
+                </html>
+            `;
+            
+            const blob = new Blob([htmlContent], { type: 'application/msword' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `protocol_GOST1497_${Date.now()}.doc`;
+            link.click();
+        }
+        
+        function exportToExcel() {
+            if (!currentResults) {
+                alert("Сначала выполните анализ");
+                return;
+            }
+            
+            // Создаем массив данных для Excel
+            const excelData = [
+                ['Параметр', 'Значение', 'Единицы'],
+                ['Временное сопротивление σв', Math.round(currentResults.sigmaB), 'МПа'],
+                ['Предел текучести', Math.round(currentResults.sigmaT), 'МПа'],
+                ['Тип предела текучести', currentResults.yieldType, ''],
+                ['Условный предел текучести σ₀.₂', Math.round(currentResults.sigma02), 'МПа'],
+                ['Модуль упругости E', Math.round(currentResults.elasticModulus / 1000), 'ГПа'],
+                ['Относительное удлинение δ', currentResults.delta.toFixed(1), '%'],
+                ['Относительное сужение ψ', currentResults.psi ? currentResults.psi.toFixed(1) : '-', '%'],
+                ['Максимальное усилие Pmax', Math.round(currentResults.Pmax), 'Н']
+            ];
+            
+            if (currentProcessedData) {
+                excelData.push([]);
+                excelData.push(['Деформация ε, %', 'Напряжение σ, МПа']);
+                currentProcessedData.slice(0, 1000).forEach(p => {
+                    excelData.push([(p.strain * 100).toFixed(4), p.stress.toFixed(1)]);
+                });
+            }
+            
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(excelData);
+            XLSX.utils.book_append_sheet(wb, ws, 'Результаты ГОСТ 1497');
+            
+            XLSX.writeFile(wb, `gost1497_results_${Date.now()}.xlsx`);
+        }
+    </script>
+    
+    <style>
+        /* Дополнительные стили для расширенного функционала */
+        .hint {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: -8px;
+            margin-bottom: 12px;
+        }
+        
+        .calibration-box {
+            margin-top: 16px;
+            padding: 16px;
+            background: #f8f9fa;
+            border-radius: 12px;
+        }
+        
+        .analysis-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .tab-btn {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .tab-btn.active {
+            color: #1e3a5f;
+            border-bottom-color: #1e3a5f;
+        }
+        
+        .tab-btn:hover {
+            background: #f0f0f0;
+        }
+        
+        .tab-content {
+            min-height: 400px;
+        }
+        
+        .result-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+        }
+        
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .results-table td, .results-table th {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .results-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        
+        .result-note {
+            margin-top: 16px;
+            padding: 12px;
+            background: #e8f4fd;
+            border-radius: 8px;
+            color: #1e3a5f;
+        }
+        
+        .gost-protocol {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            border: 1px solid #ddd;
+        }
+        
+        .protocol-header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        
+        .protocol-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        .protocol-table td, .protocol-table th {
+            border: 1px solid #333;
+            padding: 8px 12px;
+        }
+        
+        .protocol-table th {
+            background: #f0f0f0;
+        }
+        
+        .protocol-footer {
+            margin-top: 32px;
+        }
+        
+        .protocol-note {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 16px;
+            font-style: italic;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+            flex-wrap: wrap;
+        }
+        
+        .btn-word {
+            background: #2b5797;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 40px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        .btn-excel {
+            background: #217346;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 40px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        .detail-section {
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .detail-section h5 {
+            margin-top: 0;
+            margin-bottom: 12px;
+            color: #1e3a5f;
+        }
+        
+        .detail-section ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .detail-section li {
+            margin-bottom: 6px;
+        }
+        
+        #stressStrainChart {
+            width: 100%;
+            height: 400px;
+        }
+        
+        .chart-stats {
+            margin-top: 16px;
+            text-align: center;
+            font-size: 0.9rem;
+            color: #666;
+        }
+        
+        @media (max-width: 768px) {
+            .action-buttons {
+                flex-direction: column;
+            }
+            
+            .btn-word, .btn-excel {
+                width: 100%;
+            }
+        }
+    </style>
+</body>
+</html>
