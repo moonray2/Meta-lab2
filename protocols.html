@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Архив протоколов | Лаборатория онлайн-расчётов</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="logo">🔬 Лаборатория онлайн-расчётов</div>
+        <nav>
+            <a href="index.html">Главная</a>
+            <a href="gost-1497.html">ГОСТ 1497</a>
+            <a href="gost-9012.html">ГОСТ 9012</a>
+            <a href="gost-9454.html">ГОСТ 9454</a>
+            <a href="protocols.html" class="active">Архив</a>
+        </nav>
+    </header>
+    <main class="container">
+        <h1>📁 Архив протоколов лаборатории</h1>
+        <div id="protocolList" class="protocol-list"></div>
+        <button id="clearBtn" class="btn-secondary" style="margin-top:20px;">Очистить архив</button>
+    </main>
+    <script src="script.js"></script>
+    <script>
+        async function showArchives() {
+            const list = await loadAllProtocols();
+            const div = document.getElementById('protocolList');
+            if (list.length === 0) { div.innerHTML = "<p>Нет сохранённых протоколов</p>"; return; }
+            let html = "<ul>";
+            for (let item of list) {
+                let p = item.protocol;
+                html += `<li><strong>${item.date.slice(0,19)}</strong> — σв: ${p.sigmaB} МПа, предел: ${p.sigmaYield} МПа, δ: ${p.delta}%</li>`;
+            }
+            html += "</ul>";
+            div.innerHTML = html;
+        }
+        showArchives();
+        document.getElementById('clearBtn').addEventListener('click', async () => {
+            await openDB();
+            const tx = db.transaction(DB_NAME, "readwrite");
+            const store = tx.objectStore(DB_NAME);
+            store.clear();
+            tx.oncomplete = () => { showArchives(); alert("Архив очищен"); };
+        });
+    </script>
+</body>
+</html>
